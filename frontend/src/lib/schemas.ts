@@ -104,11 +104,13 @@ export const sessionDetailsResponseSchema = z.object({
   has_thumbnail: z.boolean().optional().default(false),
   model: z.string().nullish(),
   task_status: taskStatusSchema.default("idle"),
+  is_paid: z.boolean().optional().default(false),
 });
 
 export const storeSessionSchema = sessionLiteSchema.extend({
   conversation: rawConversationSchema.nullish().default([]),
   structure: structureDataSchema,
+  is_paid: z.boolean().optional().default(false),
 });
 
 const providerSchema = z.enum(["gemini", "openai", "anthropic"]);

@@ -1,12 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/hooks/useSession";
 import { useStore } from "@/store";
-import { useEffect, useMemo, useState, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { BlockAnimation } from "./BlockAnimation";
 import { ChatPanel } from "./ChatPanel";
 import { MinecraftViewer } from "./MinecraftViewer";
 import { ViewerToolbar } from "./ViewerToolbar";
+import { Download, Loader2 } from "lucide-react";
 /**
  * Session page - displays chat panel and 3D viewer for a specific session
  */
@@ -24,10 +25,13 @@ export function SessionPage() {
   const activeSessionId = useStore((s) => s.activeSessionId);
   const { isLoading, restoreSession, clearActiveSession } = useSession();
   const urlSessionId = useSessionIdFromUrl();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const paidParam = searchParams.get("paid"); // "success" | "cancelled" | null
 
   const [chatExpanded, setChatExpanded] = useState(true);
   const [chatWidth, setChatWidth] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
 
   // FPS counter
   const [fps, setFps] = useState(0);
@@ -58,9 +62,65 @@ export function SessionPage() {
     }
   }, [urlSessionId, activeSessionId, restoreSession]);
 
+  // When returning from Stripe with ?paid=success, poll until paid.json marker
+  // is confirmed (webhook fires async, may be a few seconds behind the redirect)
+  useEffect(() => {
+    if (paidParam !== "success" || !activeSessionId) return;
+    if (activeSession?.is_paid) return; // already confirmed
+
+    let attempts = 0;
+    const maxAttempts = 12; // ~24 seconds total
+    const interval = setInterval(async () => {
+      attempts++;
+      try {
+        const res = await fetch(`/api/sessions/${activeSessionId}/payment-status`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.paid) {
+            restoreSession(activeSessionId); // refresh full session → sets is_paid
+            clearInterval(interval);
+            return;
+          }
+        }
+      } catch (_) { /* ignore */ }
+      if (attempts >= maxAttempts) clearInterval(interval);
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [paidParam, activeSessionId, activeSession?.is_paid, restoreSession]);
+
+  // Strip ?paid param from URL once payment is confirmed in store
+  useEffect(() => {
+    if (paidParam && activeSession?.is_paid) {
+      setSearchParams({}, { replace: true });
+    }
+  }, [paidParam, activeSession?.is_paid, setSearchParams]);
+
+  const handleCheckout = useCallback(async () => {
+    if (!activeSessionId) return;
+    setIsCheckingOut(true);
+    try {
+      const res = await fetch(`/api/sessions/${activeSessionId}/checkout`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error(`Checkout error: ${res.status}`);
+      const data = await res.json();
+      if (data.already_paid) {
+        // Webhook already fired — refresh session to update is_paid in store
+        await restoreSession(activeSessionId);
+      } else if (data.checkout_url) {
+        window.location.href = data.checkout_url;
+      }
+    } catch (err) {
+      console.error("Checkout failed:", err);
+    } finally {
+      setIsCheckingOut(false);
+    }
+  }, [activeSessionId, restoreSession]);
+
   const handleBackToProjects = () => {
     clearActiveSession();
-    navigate("/");
+    navigate("/app");
   };
   const sessions = useStore((s) => s.sessions);
 
@@ -113,7 +173,7 @@ export function SessionPage() {
       </div>
 
       {/* Floating back button - dark glass treatment */}
-      <div className="absolute top-4 left-4 z-20">
+      <div className="absolute top-4 left-4 z-20 flex items-center gap-2">
         <Button
           variant="outline"
           size="sm"
@@ -122,6 +182,64 @@ export function SessionPage() {
         >
           ← Projects
         </Button>
+
+        {/* Download / Checkout — only visible when structure exists */}
+        {structureData && activeSessionId && (
+          <>
+            {activeSession?.is_paid ? (
+              /* Already paid → direct download */
+              <a
+                href={`/api/sessions/${activeSessionId}/export/mcpack`}
+                download
+                title="Descargar para tablet (Minecraft Bedrock)"
+              >
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="bg-emerald-600/80 border-emerald-400/30 text-white shadow-[inset_0_1px_2px_rgba(0,0,0,0.2)] backdrop-blur-xl hover:bg-emerald-500/90 hover:text-white py-1 px-2 gap-1.5"
+                >
+                  <Download className="size-3.5" />
+                  Descargar para tablet
+                </Button>
+              </a>
+            ) : paidParam === "success" ? (
+              /* Returned from Stripe — webhook may still be in-flight */
+              <Button
+                variant="outline"
+                size="sm"
+                disabled
+                className="bg-emerald-600/60 border-emerald-400/30 text-white/80 py-1 px-2 gap-1.5 backdrop-blur-xl"
+              >
+                <Loader2 className="size-3.5 animate-spin" />
+                Activando descarga…
+              </Button>
+            ) : (
+              /* Not paid → show checkout button */
+              <div className="flex flex-col items-start gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCheckout}
+                  disabled={isCheckingOut}
+                  className="bg-emerald-600/80 border-emerald-400/30 text-white shadow-[inset_0_1px_2px_rgba(0,0,0,0.2)] backdrop-blur-xl hover:bg-emerald-500/90 hover:text-white py-1 px-2 gap-1.5"
+                  title="Descargar para tablet (Minecraft Bedrock) — $2.99"
+                >
+                  {isCheckingOut ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Download className="size-3.5" />
+                  )}
+                  {isCheckingOut ? "Redirigiendo…" : "Descargar · $2.99"}
+                </Button>
+                {paidParam === "cancelled" && (
+                  <span className="text-xs text-amber-300/90 bg-black/30 backdrop-blur-sm rounded px-2 py-0.5">
+                    Pago cancelado
+                  </span>
+                )}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Centered viewer toolbar - only show when structure exists */}

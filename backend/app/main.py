@@ -12,7 +12,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes.chat import router as chat
+from app.api.routes.export import router as export
 from app.api.routes.models import router as models
+from app.api.routes.payments import router as payments
 from app.api.routes.session import router as session
 from app.config import settings
 
@@ -37,6 +39,8 @@ def add_routers(app: FastAPI):
     app.include_router(chat, prefix="/api", tags=["chat"])
     app.include_router(models, prefix="/api", tags=["models"])
     app.include_router(session, prefix="/api", tags=["sessions"])
+    app.include_router(export, prefix="/api", tags=["export"])
+    app.include_router(payments, prefix="/api", tags=["payments"])
 
 
 app = FastAPI(
@@ -62,7 +66,7 @@ async def health():
 
 
 # Serve static files from frontend build (if exists)
-frontend_build = Path(__file__).parent.parent.parent.parent / "frontend" / "dist"
+frontend_build = Path(__file__).parent.parent.parent / "frontend" / "dist"
 if frontend_build.exists():
     # Mount static assets
     app.mount(

@@ -344,6 +344,12 @@ class MinecraftSchematicAgent:
         response.tool_calls = tool_accumulator.build()
         yield None, response
 
+    def _has_structure(self) -> bool:
+        """Check if a valid structure (code.json) has been generated for this session."""
+        from app.services.session import _storage_dir
+        structure_file = _storage_dir() / self.session_id / "code.json"
+        return structure_file.exists()
+
     async def run(self, conversation: list[dict]) -> AsyncIterator[ActivityEvent]:
         """
         Run the agent loop.
@@ -354,6 +360,8 @@ class MinecraftSchematicAgent:
         Yields:
             ActivityEvent for streaming to UI
         """
+        edit_code_called = False  # Track if edit_code was ever invoked
+
         for turn in range(1, self.max_turns + 1):
             logger.debug("Starting turn %d", turn)
             yield ActivityEvent(type=ActivityEventType.TURN_START, data={"turn": turn})
@@ -370,7 +378,25 @@ class MinecraftSchematicAgent:
 
             # Check for completion (no tool calls)
             if not response.tool_calls:
-                if response.text.strip():
+                # If no structure has been built yet, push the agent to actually use edit_code
+                if not edit_code_called and not self._has_structure():
+                    logger.debug(
+                        "Turn %d: agent replied with text but no structure — injecting reminder",
+                        turn,
+                    )
+                    conversation.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                "You described the plan but haven't written any code yet. "
+                                "You MUST call the `edit_code` tool NOW with the complete Python code "
+                                "that builds the structure. Do not describe — call the tool immediately."
+                            ),
+                        }
+                    )
+                    continue  # go to next turn
+
+                if response.text.strip() or self._has_structure():
                     yield ActivityEvent(
                         type=ActivityEventType.COMPLETE,
                         data={
@@ -394,8 +420,11 @@ class MinecraftSchematicAgent:
 
             # Execute tool calls
             tool_responses = []
+            zero_block_edit = False  # track if edit_code compiled with 0 blocks
             for tool_call in response.tool_calls:
                 func_name = tool_call.function.name
+                if func_name == "edit_code":
+                    edit_code_called = True
                 func_args = json.loads(tool_call.function.arguments or "{}")
 
                 yield ActivityEvent(
@@ -405,6 +434,17 @@ class MinecraftSchematicAgent:
 
                 result, tool_response = await self._execute_tool(tool_call)
 
+                # Detect successful compilation that produced zero blocks
+                if func_name == "edit_code" and result.compilation:
+                    try:
+                        if (
+                            result.compilation.get("status") == "success"
+                            and result.compilation.get("block_count", -1) == 0
+                        ):
+                            zero_block_edit = True
+                    except Exception:
+                        pass
+
                 yield ActivityEvent(
                     type=ActivityEventType.TOOL_RESULT, data=result.to_dict()
                 )
@@ -413,6 +453,24 @@ class MinecraftSchematicAgent:
 
             # Save tool responses to conversation
             conversation.extend(tool_responses)
+
+            # If edit_code produced 0 blocks, push the agent to fix the structure
+            if zero_block_edit:
+                logger.debug(
+                    "Turn %d: edit_code succeeded but block_count is 0 — injecting reminder",
+                    turn,
+                )
+                conversation.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "Your code compiled successfully but produced 0 blocks — "
+                            "the structure is empty. You MUST call `edit_code` again with "
+                            "code that actually adds Block instances to the scene. "
+                            "Make sure scene.add(...) is called with at least one Block."
+                        ),
+                    }
+                )
 
         # Max turns reached
         yield ActivityEvent(

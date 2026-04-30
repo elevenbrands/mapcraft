@@ -7,6 +7,8 @@ import base64
 from pathlib import Path
 
 from app.api.models import SessionResponse
+from app.api.routes.payments import is_session_paid
+from app.config import settings
 from app.services.event_buffer import get_buffer
 from app.services.file_ops import get_file_service
 from app.services.session import SessionService
@@ -17,10 +19,10 @@ router = APIRouter()
 
 CODE_FNAME = "code.json"
 THUMBNAIL_FNAME = "thumbnail.png"
-# Store sessions outside backend/ to avoid triggering uvicorn reload
-LOCAL_STORAGE_FOLDER = (
-    Path(__file__).parent.parent.parent.parent.parent / ".storage" / "sessions"
-)
+
+
+def _storage_root() -> Path:
+    return Path(settings.storage_path)
 
 
 @router.get("/sessions")
@@ -71,7 +73,7 @@ async def get_session(session_id: str):
     to replay all buffered events and build the in-progress message.
     """
     fs = get_file_service()
-    session_dir = Path(LOCAL_STORAGE_FOLDER) / session_id
+    session_dir = _storage_root() / session_id
     if not await fs.exists(session_dir):
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
 
@@ -105,6 +107,7 @@ async def get_session(session_id: str):
     has_thumbnail = await fs.exists(thumbnail_path)
 
     model = await SessionService.get_model(session_id)
+    is_paid = await is_session_paid(session_id)
 
     return JSONResponse(
         content={
@@ -114,6 +117,7 @@ async def get_session(session_id: str):
             "has_thumbnail": has_thumbnail,
             "model": model,
             "task_status": task_status,
+            "is_paid": is_paid,
         }
     )
 
@@ -139,7 +143,7 @@ async def get_structure(session_id: str):
     Returns the code.json file which contains the structure data.
     """
     fs = get_file_service()
-    code_path = Path(LOCAL_STORAGE_FOLDER) / session_id / CODE_FNAME
+    code_path = _storage_root() / session_id / CODE_FNAME
     if not await fs.exists(code_path):
         raise HTTPException(
             status_code=404, detail=f"Structure not found for session {session_id}"
@@ -161,7 +165,7 @@ async def get_thumbnail(session_id: str):
     Returns the thumbnail.png file if it exists.
     """
     fs = get_file_service()
-    thumbnail_path = Path(LOCAL_STORAGE_FOLDER) / session_id / THUMBNAIL_FNAME
+    thumbnail_path = _storage_root() / session_id / THUMBNAIL_FNAME
     if not await fs.exists(thumbnail_path):
         raise HTTPException(
             status_code=404, detail=f"Thumbnail not found for session {session_id}"
@@ -181,7 +185,7 @@ async def upload_thumbnail(session_id: str, request: Request):
     Accepts base64-encoded PNG image data.
     """
     fs = get_file_service()
-    session_dir = Path(LOCAL_STORAGE_FOLDER) / session_id
+    session_dir = _storage_root() / session_id
     if not await fs.exists(session_dir):
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
 

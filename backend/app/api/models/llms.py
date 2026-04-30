@@ -3,6 +3,8 @@ from pydantic import BaseModel
 
 AVAILABLE_MODELS = {
     "gemini": [
+        "gemini/gemini-2.5-pro",
+        "gemini/gemini-2.5-flash",
         "gemini/gemini-3-pro-preview",
         "gemini/gemini-3-flash-preview",
     ],

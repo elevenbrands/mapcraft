@@ -57,6 +57,7 @@ export function useSession() {
           conversation: session.conversation,
           structure: session.structure,
           has_thumbnail: session.has_thumbnail,
+          is_paid: session.is_paid,
         });
         // Restore the model that was used for this session
         if (session.model) {

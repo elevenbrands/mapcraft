@@ -7,10 +7,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from app.agent.minecraft.scaffold import DEFAULT_SCAFFOLD
+from app.config import settings
 from app.services.file_ops import get_file_service
 
-# Store sessions outside backend/ to avoid triggering uvicorn reload
-STORAGE_DIR = Path(__file__).parent.parent.parent.parent / ".storage" / "sessions"
+
+def _storage_dir() -> Path:
+    """Return session storage directory (env-configurable for Railway)."""
+    return Path(settings.storage_path)
+
+
+# Back-compat alias used by tests / older code
+STORAGE_DIR = _storage_dir()
 
 
 class SessionService:
@@ -21,7 +28,7 @@ class SessionService:
         """Create a new session directory and return session_id"""
         fs = get_file_service()
         session_id = str(uuid.uuid4())
-        session_dir = STORAGE_DIR / session_id
+        session_dir = _storage_dir() / session_id
         await fs.mkdir(session_dir, parents=True, exist_ok=True)
 
         # Initialize files
@@ -44,7 +51,7 @@ class SessionService:
     async def load_conversation(session_id: str) -> list[dict]:
         """Load conversation history from file"""
         fs = get_file_service()
-        conversation_file = STORAGE_DIR / session_id / "conversation.json"
+        conversation_file = _storage_dir() / session_id / "conversation.json"
         if not await fs.exists(conversation_file):
             raise FileNotFoundError(f"Session {session_id} not found")
         return await fs.read_json(conversation_file)
@@ -53,7 +60,7 @@ class SessionService:
     async def save_conversation(session_id: str, conversation: list[dict]) -> None:
         """Save conversation history to file"""
         fs = get_file_service()
-        conversation_file = STORAGE_DIR / session_id / "conversation.json"
+        conversation_file = _storage_dir() / session_id / "conversation.json"
         await fs.write_json(conversation_file, conversation)
         await SessionService._update_metadata(session_id)
 
@@ -61,7 +68,7 @@ class SessionService:
     async def save_code(session_id: str, code: str) -> None:
         """Save generated SDK code to file"""
         fs = get_file_service()
-        code_file = STORAGE_DIR / session_id / "code.py"
+        code_file = _storage_dir() / session_id / "code.py"
         await fs.write_text(code_file, code)
         await SessionService._update_metadata(session_id)
 
@@ -69,7 +76,7 @@ class SessionService:
     async def load_code(session_id: str) -> str:
         """Load the current SDK code"""
         fs = get_file_service()
-        code_file = STORAGE_DIR / session_id / "code.py"
+        code_file = _storage_dir() / session_id / "code.py"
         if not await fs.exists(code_file):
             raise FileNotFoundError(f"Session {session_id} not found")
         return await fs.read_text(code_file)
@@ -77,7 +84,7 @@ class SessionService:
     @staticmethod
     def _metadata_path(session_id: str) -> Path:
         """Return the path to the metadata file for a session"""
-        return STORAGE_DIR / session_id / "metadata.json"
+        return _storage_dir() / session_id / "metadata.json"
 
     @staticmethod
     def _current_timestamp() -> str:
@@ -148,14 +155,14 @@ class SessionService:
     async def save_structure(session_id: str, structure: dict) -> None:
         """Save the generated structure JSON"""
         fs = get_file_service()
-        structure_file = STORAGE_DIR / session_id / "code.json"
+        structure_file = _storage_dir() / session_id / "code.json"
         await fs.write_json(structure_file, structure)
 
     @staticmethod
     async def delete_session(session_id: str) -> None:
         """Delete a session and all its associated data"""
         fs = get_file_service()
-        session_dir = STORAGE_DIR / session_id
+        session_dir = _storage_dir() / session_id
         if not await fs.exists(session_dir):
             raise FileNotFoundError(f"Session {session_id} not found")
         await fs.rmtree(session_dir)
@@ -164,9 +171,9 @@ class SessionService:
     async def list_session_dirs() -> list[Path]:
         """List all session directories"""
         fs = get_file_service()
-        if not await fs.exists(STORAGE_DIR):
+        if not await fs.exists(_storage_dir()):
             return []
-        return await fs.iterdir(STORAGE_DIR)
+        return await fs.iterdir(_storage_dir())
 
     @staticmethod
     async def get_session_info(session_dir: Path) -> dict | None:
