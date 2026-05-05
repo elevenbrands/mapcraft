@@ -2,6 +2,8 @@
 FastAPI application entry point
 """
 
+import gzip
+import json
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -27,10 +29,54 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# Demo session IDs that must always exist (seeded from backend/seeds/)
+DEMO_SESSION_IDS = [
+    "61d92ed5-e96c-4872-9f32-d687f850e8dd",  # Aldea Medieval
+    "4af3a3e4-5c8e-4083-b9d1-cec492b16bb6",  # Castillo de Hielo
+    "c72266e9-2c3f-4486-a345-32f42810b6cc",  # Ciudad Futurista
+]
+
+_SEEDS_DIR = Path(__file__).parent.parent / "seeds"
+
+
+def _seed_demo_sessions() -> None:
+    """
+    Copy compressed demo code.json files to the storage path on first boot.
+    Skips any session that already has a code.json.
+    """
+    storage_root = Path(settings.storage_path)
+    storage_root.mkdir(parents=True, exist_ok=True)
+
+    for session_id in DEMO_SESSION_IDS:
+        session_dir = storage_root / session_id
+        code_path = session_dir / "code.json"
+
+        if code_path.exists():
+            continue  # already seeded
+
+        seed_file = _SEEDS_DIR / f"{session_id}.json.gz"
+        if not seed_file.exists():
+            logger.warning("Demo seed file missing: %s", seed_file)
+            continue
+
+        session_dir.mkdir(parents=True, exist_ok=True)
+
+        # Decompress and write code.json
+        with gzip.open(seed_file, "rb") as f_in:
+            data = f_in.read()
+        code_path.write_bytes(data)
+
+        # Write paid.json marker so demo maps can be previewed/exported
+        paid_path = session_dir / "paid.json"
+        paid_path.write_text(json.dumps({"paid": True, "demo": True}))
+
+        logger.info("Seeded demo session %s", session_id)
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    # Startup
+    # Startup — seed demo maps so landing page previews always work
+    _seed_demo_sessions()
     yield
     # Shutdown (nothing to clean up)
 
