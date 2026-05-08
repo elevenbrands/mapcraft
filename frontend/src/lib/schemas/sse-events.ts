@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 
 export const turnStartEvent = z.object({
   type: z.literal("turn_start"),

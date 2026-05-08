@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 
 export const createSessionResponseSchema = z.object({
   session_id: z.string(),
@@ -12,8 +12,8 @@ export const sessionLiteSchema = z.object({
   has_structure: z.boolean(),
   has_thumbnail: z.boolean().optional().default(false),
   message_count: z.number(),
-  created_at: z.string(),
-  updated_at: z.string(),
+  created_at: z.string().nullable(),
+  updated_at: z.string().nullable(),
 });
 
 export const listSessionsResponseSchema = z.object({
