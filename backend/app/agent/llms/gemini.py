@@ -213,7 +213,7 @@ class GeminiService(BaseLLMService):
             thought_delta = ""
             tool_calls_delta: list[dict] = []
 
-            parts = candidate.content.parts if candidate.content else []
+            parts = (candidate.content.parts if candidate.content else None) or []
             for part in parts:
                 # Capture text and thought summaries separately
                 if getattr(part, "text", None):
