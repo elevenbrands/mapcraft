@@ -1,0 +1,33 @@
+# Secrets — never bake into the image
+backend/.env
+backend/.env.*
+!backend/.env.example
+**/*.pem
+**/*.key
+
+# Local session data
+.storage/
+backend/.storage/
+
+# Python
+**/__pycache__/
+**/*.pyc
+backend/.venv/
+backend/.pytest_cache/
+
+# Node — stage 1 runs npm ci from the lockfile
+frontend/node_modules/
+frontend/dist/
+
+# VCS / tooling / docs
+# NOTE: dockerignore patterns without ** match root-level only. Do NOT change
+# *.md to **/*.md — backend/app/agent/minecraft/docs/*.md must ship in the
+# image (the agent embeds them in its system prompt at runtime).
+.git/
+.github/
+.claude/
+docs/
+evaluation/
+*.md
+!README.md
+.DS_Store

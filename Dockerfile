@@ -40,5 +40,6 @@ RUN mkdir -p /app/.storage/sessions
 # Expose port
 EXPOSE 8000
 
-# Start FastAPI via uv run (respects pyproject.toml entry point)
-CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start FastAPI via uv run (respects pyproject.toml entry point).
+# Shell form so Railway's injected $PORT is honored; falls back to 8000 locally.
+CMD uv run uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
