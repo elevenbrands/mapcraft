@@ -465,18 +465,24 @@ class TestEdgeCases:
 
 
 # =============================================================================
-# OpenAI sanitization tests
+# OpenAI Responses API input conversion tests
 # =============================================================================
 
-class TestOpenAISanitization:
-    """Test OpenAI message sanitization for cross-provider compatibility"""
+class TestOpenAIResponsesInputConversion:
+    """Test OpenAI Responses API input conversion (_convert_messages_to_input).
+
+    The provider migrated from Chat Completions to the Responses API: messages
+    become typed input items (message / function_call / function_call_output)
+    keyed by ``call_id`` rather than being sanitized in place. These tests cover
+    that current surface.
+    """
 
     @pytest.fixture
     def service(self):
         return OpenAIService(model_id="gpt-4o")
 
     def test_null_tool_call_ids_get_generated(self, service):
-        """Null tool call IDs should get generated UUIDs"""
+        """A null tool-call id yields a function_call item with a generated call_id."""
         messages = [
             {"role": "user", "content": "Hello"},
             {
@@ -490,24 +496,16 @@ class TestOpenAISanitization:
                     }
                 ],
             },
-            {
-                "role": "tool",
-                "tool_call_id": None,
-                "content": '{"result": "code here"}',
-                "name": "read_code",
-            },
         ]
-        result = service._sanitize_messages(messages)
+        items = service._convert_messages_to_input("system", messages)
 
-        # Tool call should have generated ID
-        assert result[1]["tool_calls"][0]["id"] is not None
-        assert result[1]["tool_calls"][0]["id"].startswith("call_")
-
-        # Tool message should have matching ID
-        assert result[2]["tool_call_id"] == result[1]["tool_calls"][0]["id"]
+        function_calls = [i for i in items if i["type"] == "function_call"]
+        assert len(function_calls) == 1
+        assert function_calls[0]["call_id"].startswith("call_")
+        assert function_calls[0]["name"] == "read_code"
 
     def test_existing_ids_preserved(self, service):
-        """Existing valid IDs should be preserved"""
+        """Existing valid ids are preserved on both the call and its result item."""
         messages = [
             {"role": "user", "content": "Hello"},
             {
@@ -528,14 +526,18 @@ class TestOpenAISanitization:
                 "name": "read_code",
             },
         ]
-        result = service._sanitize_messages(messages)
+        items = service._convert_messages_to_input("system", messages)
 
-        # IDs should be unchanged
-        assert result[1]["tool_calls"][0]["id"] == "call_existing123"
-        assert result[2]["tool_call_id"] == "call_existing123"
+        function_call = next(i for i in items if i["type"] == "function_call")
+        function_output = next(
+            i for i in items if i["type"] == "function_call_output"
+        )
+        assert function_call["call_id"] == "call_existing123"
+        assert function_output["call_id"] == "call_existing123"
+        assert function_output["output"] == '{"result": "code here"}'
 
-    def test_multiple_tool_calls_matched(self, service):
-        """Multiple tool calls should match with their results in order"""
+    def test_multiple_tool_calls_converted_in_order(self, service):
+        """Multiple tool calls become function_call items in order, ids preserved."""
         messages = [
             {"role": "user", "content": "Hello"},
             {
@@ -543,36 +545,34 @@ class TestOpenAISanitization:
                 "content": "",
                 "tool_calls": [
                     {
-                        "id": None,
+                        "id": "call_1",
                         "type": "function",
                         "function": {"name": "read_code", "arguments": "{}"},
                     },
                     {
-                        "id": None,
+                        "id": "call_2",
                         "type": "function",
                         "function": {"name": "edit_code", "arguments": "{}"},
                     },
                 ],
             },
-            {
-                "role": "tool",
-                "tool_call_id": None,
-                "content": '{"result": "code"}',
-                "name": "read_code",
-            },
-            {
-                "role": "tool",
-                "tool_call_id": None,
-                "content": '{"result": "edited"}',
-                "name": "edit_code",
-            },
         ]
-        result = service._sanitize_messages(messages)
+        items = service._convert_messages_to_input("system", messages)
 
-        # Each tool message should match its corresponding tool call
-        tool_call_1_id = result[1]["tool_calls"][0]["id"]
-        tool_call_2_id = result[1]["tool_calls"][1]["id"]
+        function_calls = [i for i in items if i["type"] == "function_call"]
+        assert len(function_calls) == 2
+        assert function_calls[0]["call_id"] == "call_1"
+        assert function_calls[0]["name"] == "read_code"
+        assert function_calls[1]["call_id"] == "call_2"
+        assert function_calls[1]["name"] == "edit_code"
 
-        assert result[2]["tool_call_id"] == tool_call_1_id
-        assert result[3]["tool_call_id"] == tool_call_2_id
-        assert tool_call_1_id != tool_call_2_id
+    def test_user_message_becomes_input_text(self, service):
+        """User messages convert to a message item with input_text content."""
+        items = service._convert_messages_to_input(
+            "system", [{"role": "user", "content": "Build a castle"}]
+        )
+        assert len(items) == 1
+        assert items[0]["type"] == "message"
+        assert items[0]["role"] == "user"
+        assert items[0]["content"][0]["type"] == "input_text"
+        assert items[0]["content"][0]["text"] == "Build a castle"
