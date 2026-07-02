@@ -134,7 +134,7 @@ export function ProjectsPage() {
       >
         <div className="w-full max-w-5xl flex flex-col items-center">
           <h1 className="text-6xl font-medium text-foreground/90 mb-5 tracking-tight font-display leading-tight">
-            MinecraftLM
+            MapCraft
           </h1>
           <p className="text-xl text-muted-foreground/80 mb-8 font-normal text-center max-w-lg leading-relaxed">
             What would you like to build?

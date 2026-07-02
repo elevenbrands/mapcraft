@@ -147,7 +147,7 @@ export function SessionPage() {
                 <BlockAnimation size={32} className="text-white/90" />
               </div>
               <h2 className="text-xl font-semibold text-white/90 mb-3">
-                MinecraftLM
+                MapCraft
               </h2>
               <p className="mb-6 text-sm text-white/60">
                 {isLoading

@@ -118,7 +118,7 @@ def _to_bedrock_states(properties: Dict[str, str]) -> nbtlib.Compound:
 
 def structure_to_mcstructure_bytes(structure: Dict[str, Any]) -> bytes:
     """
-    Convert a MinecraftLM structure dict → Bedrock .mcstructure binary NBT.
+    Convert a MapCraft structure dict → Bedrock .mcstructure binary NBT.
 
     Input format::
 
@@ -330,7 +330,7 @@ async def export_mcstructure(session_id: str):
             status_code=500, detail=f"Error generating .mcstructure: {exc}"
         ) from exc
 
-    filename = f"minecraftlm_{session_id[:8]}.mcstructure"
+    filename = f"mapcraft_{session_id[:8]}.mcstructure"
     return StreamingResponse(
         io.BytesIO(nbt_bytes),
         media_type="application/octet-stream",
@@ -372,7 +372,7 @@ async def export_mcpack(
         ) from exc
 
     safe_name = "".join(c for c in name if c.isalnum() or c in " _-").strip()[:30]
-    filename = f"{safe_name or 'minecraftlm'}.mcpack"
+    filename = f"{safe_name or 'mapcraft'}.mcpack"
 
     return StreamingResponse(
         io.BytesIO(pack_bytes),
