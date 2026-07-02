@@ -33,6 +33,18 @@ export function SessionPage() {
   const [isResizing, setIsResizing] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
 
+  const sessions = useStore((s) => s.sessions);
+
+  // Declared before the effects below: their dependency arrays read
+  // activeSession?.is_paid at render time, so a later declaration is a TDZ crash
+  const activeSession = useMemo(() => {
+    return activeSessionId ? sessions[activeSessionId] : null;
+  }, [activeSessionId, sessions]);
+
+  const structureData = useMemo(() => {
+    return activeSession?.structure || null;
+  }, [activeSession]);
+
   // FPS counter
   const [fps, setFps] = useState(0);
   const frameTimesRef = useRef<number[]>([]);
@@ -122,16 +134,6 @@ export function SessionPage() {
     clearActiveSession();
     navigate("/app");
   };
-  const sessions = useStore((s) => s.sessions);
-
-  const activeSession = useMemo(() => {
-    return activeSessionId ? sessions[activeSessionId] : null;
-  }, [activeSessionId, sessions]);
-
-  const structureData = useMemo(() => {
-    return activeSession?.structure || null;
-  }, [activeSession]);
-
   return (
     <div className="h-screen w-screen relative overflow-hidden">
       {/* 3D Viewer - Full screen background, extended left to center content accounting for chat panel */}
