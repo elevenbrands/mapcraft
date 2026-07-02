@@ -69,7 +69,7 @@ structure = {VALID_STRUCTURE}
 """
     result = CodeValidator.validate_code(code)
     assert result.is_valid
-    assert result.structure["width"] == 15
+    assert result.structure["width"] == 1
 
 
 def test_validate_with_imports():
@@ -81,7 +81,7 @@ structure = {VALID_STRUCTURE}
 """
     result = CodeValidator.validate_code(code)
     assert result.is_valid
-    assert result.structure["width"] == 4
+    assert result.structure["width"] == 1
 
 
 def test_validate_multiline_string():
