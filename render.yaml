@@ -1,0 +1,38 @@
+# Render Blueprint — MapCraft (web service, Docker, free tier)
+# Docs: https://render.com/docs/blueprint-spec
+#
+# El plan free duerme el servicio tras ~15 min sin uso y tarda ~30-50 s en
+# despertar en la primera visita. NO tiene disco persistente: las sesiones y los
+# markers de pago (paid.json) se borran en cada deploy/reinicio. Sirve para
+# validar que la web funciona en internet, NO para ventas reales sostenidas.
+# Para ventas de verdad: subir a un plan de pago y montar un disco en /data
+# (ver docs/WEB_DEPLOY.md, sección "Volumen persistente").
+
+services:
+  - type: web
+    name: mapcraft
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # Modelo del agente (explícito para no depender del default del código)
+      - key: LLM_MODEL
+        value: gemini/gemini-2.5-flash
+      # Secretos: se cargan en el dashboard de Render, nunca en este archivo.
+      # sync:false = Render pide el valor a mano y no lo versiona.
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      # URL pública final de Render (https://<algo>.onrender.com). Construye los
+      # redirects de Stripe. Se rellena en el dashboard tras el primer deploy.
+      - key: PUBLIC_URL
+        sync: false
+      - key: LOG_LEVEL
+        value: INFO
+    # STORAGE_PATH se omite a propósito: en free no hay disco, así el código usa
+    # su default writable (/app/.storage/sessions dentro del contenedor).
